@@ -32,7 +32,10 @@ from MlFunctions.DnnFunctions import (
 
 from linearAlgebraFunctions import gram,addGramToFlatDF
 
-from RunMgmt import manage_run
+# import RunMgmt
+# RunMgmt.bypass_mgmt = True
+# manage_run = RunMgmt.manage_run
+from RunMgmt import Cache
 
 # Those import use root...
 # from root_numpy import rec2array
@@ -92,7 +95,7 @@ variableBatchSigLossInvert=False
 
 ## Heiner ON
 doRegression=False
-normalLoss=True
+normalLoss=False
 sigLoss=False
 sigLossInvert=False
 sigLoss2Invert=False
@@ -100,6 +103,7 @@ sigLossInvertSqrt=False
 asimovSigLoss=False
 asimovSigLossInvert=False
 asimovSigLossBothInvert=True
+asimovSigLossBothInvertPlusRelu=True
 #asimovSigLossSysts=[0.01,0.05,0.1,0.2,0.3,0.4,0.5]
 asimovSigLossSysts=[0.5]
 crossEntropyFirst=False
@@ -341,7 +345,7 @@ if __name__=='__main__':
 
             }
 
-    trainedModels={}
+    trainedModels={}  # Cache('testPlots/trainedModels')
 
     for varSetName,varSet in chosenVars.iteritems():
 
@@ -458,8 +462,7 @@ if __name__=='__main__':
                 for name,config in dnnConfigs.iteritems():
 
                     opt_name = varSetName+'_'+name
-                    @manage_run(opt_name)
-                    def normalLoss_func():
+                    if normalLoss and not trainedModels.get(opt_name):
                         print 'Defining and fitting DNN',name
                         dnn = Dnn(mlData,'testPlots/mlPlots/'+varSetName+'/'+name)
                         dnn.setup(hiddenLayers=config['hiddenLayers'],dropOut=config['dropOut'],l2Regularization=config['l2Regularization'],
@@ -480,15 +483,11 @@ if __name__=='__main__':
                         dnn.explainPredictions()
                         dnn.diagnostics(batchSize=8192)
                         dnn.makeHepPlots(expectedSignal,expectedBkgd,asimovSigLossSysts,makeHistograms=makeHistograms)
-                        return dnn
-
-                    if normalLoss:
-                        trainedModels[opt_name]=normalLoss_func()
+                        trainedModels[opt_name]=dnn
 
 
                     opt_name = varSetName+'_'+name
-                    @manage_run(opt_name)
-                    def sigLoss_func():
+                    if sigLoss and not trainedModels.get(opt_name):
                         print 'Defining and fitting DNN with significance loss function',name
                         timingFile.write('\nTiming normal batch, with DNN '+name)
                         t0=time.time()
@@ -507,10 +506,8 @@ if __name__=='__main__':
                         t1=time.time()
                         timingFile.write(': '+str(t1-t0)+' s\n')
                         dnn.makeHepPlots(expectedSignal,expectedBkgd,asimovSigLossSysts,makeHistograms=makeHistograms)
-                        return dnn
+                        trainedModels[opt_name]=dnn
 
-                    if sigLoss:
-                        trainedModels[opt_name]=sigLoss_func()
 
                     if sigLossInvert:
 
@@ -599,10 +596,40 @@ if __name__=='__main__':
                     for chosenSyst in asimovSigLossSysts:
 
                         systName = str(chosenSyst).replace('.','p')
+                        opt_name = varSetName+'_asimovSigLossBothInvertPlusRelu_'+name+systName
+
+                        if asimovSigLossBothInvertPlusRelu and not trainedModels.get(opt_name):
+                            #First set up a model that trains on the sig loss
+                            print 'Defining and fitting DNN with inverted asimov significance loss function plus extra relu layer',name
+                            dnn = Dnn(mlData,'testPlots/mlPlots/asimovSigLossBothInvertSystPlusRelu'+systName+'/'+varSetName+'/'+name)
+                            dnn.setup(hiddenLayers=config['hiddenLayers'],dropOut=config['dropOut'],l2Regularization=config['l2Regularization'],
+                                    loss=significanceLoss2Invert(expectedSignal,expectedBkgd),
+                                    addFinalRelu=True,
+                                    extraMetrics=[
+                                        asimovSignificanceLossInvert(expectedSignal,expectedBkgd,chosenSyst),asimovSignificanceFull(expectedSignal,expectedBkgd,chosenSyst),
+                                        significanceFull(expectedSignal,expectedBkgd),truePositive,falsePositive
+                                    ])
+
+                            dnn.fit(epochs=5,batch_size=config['batch_size'])
+                            dnn.diagnostics(batchSize=8192,subDir='pretraining')
+                            dnn.makeHepPlots(expectedSignal,expectedBkgd,[chosenSyst],makeHistograms=makeHistograms,subDir='pretraining')
+
+                            #Now recompile the model with a different loss and train further
+                            dnn.recompileModel(asimovSignificanceLossInvert(expectedSignal,expectedBkgd,chosenSyst))
+                            dnn.fit(epochs=config['epochs'],batch_size=config['batch_size'],callbacks=[earlyStopping])
+                            dnn.save()
+                            print ' > Producing diagnostics'
+                            dnn.diagnostics(batchSize=8192)
+                            dnn.makeHepPlots(expectedSignal,expectedBkgd,[chosenSyst],makeHistograms=makeHistograms)
+                            trainedModels[opt_name]=dnn
+
+
+                    for chosenSyst in asimovSigLossSysts:
+
+                        systName = str(chosenSyst).replace('.','p')
                         opt_name = varSetName+'_asimovSigLossBothInvert_'+name+systName
 
-                        @manage_run(opt_name)
-                        def asimovSigLossBothInvert_func():
+                        if asimovSigLossBothInvert and not trainedModels.get(opt_name):
                             #First set up a model that trains on the sig loss
                             print 'Defining and fitting DNN with inverted asimov significance loss function',name
                             dnn = Dnn(mlData,'testPlots/mlPlots/asimovSigLossBothInvertSyst'+systName+'/'+varSetName+'/'+name)
@@ -624,10 +651,7 @@ if __name__=='__main__':
                             print ' > Producing diagnostics'
                             dnn.diagnostics(batchSize=8192)
                             dnn.makeHepPlots(expectedSignal,expectedBkgd,[chosenSyst],makeHistograms=makeHistograms)
-                            return dnn
-
-                        if asimovSigLossBothInvert:
-                            trainedModels[opt_name]=asimovSigLossBothInvert_func()
+                            trainedModels[opt_name]=dnn
 
 
                     if asimovSigLoss:
@@ -727,7 +751,8 @@ if __name__=='__main__':
 
                         dnn.makeHepPlots(expectedSignal,expectedBkgd,systematic,makeHistograms=makeHistograms,customPrediction=finalPred)
 
-                    if variableBatchSigLossInvert:
+                    opt_name = varSetName+'_variableBatchSigLossInvert_'+name
+                    if variableBatchSigLossInvert and not trainedModels.get(opt_name):
 
                         print 'Defining and fitting DNN with significance loss function',name
                         timingFile.write('\nTiming variable batch, with DNN '+name)
@@ -755,7 +780,7 @@ if __name__=='__main__':
                         timingFile.write(': '+str(t1-t0)+' s\n')
                         dnn.makeHepPlots(expectedSignal,expectedBkgd,systematic,makeHistograms=makeHistograms)
 
-                        trainedModels[varSetName+'_variableBatchSigLossInvert_'+name]=dnn
+                        trainedModels[opt_name]=dnn
 
 
                 pass

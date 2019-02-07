@@ -46,23 +46,23 @@ class Dnn(object):
         else:
             self.scoreTypes = ['acc']
 
-    def setup(self,hiddenLayers=[1.0],dropOut=None,l2Regularization=None,loss=None,extraMetrics=[]):
+    def setup(self,hiddenLayers=[1.0],dropOut=None,l2Regularization=None,loss=None,extraMetrics=[],addFinalRelu=False):
 
         '''Setup the neural net. Input a list of hiddenlayers
         if you fill float takes as fraction of inputs+outputs
-        if you fill int takes as number. 
-        E.g.:  hiddenLayers=[0.66,20] 
-        has two hidden layers, one with 2/3 of input plus output 
+        if you fill int takes as number.
+        E.g.:  hiddenLayers=[0.66,20]
+        has two hidden layers, one with 2/3 of input plus output
         neurons, second with 20 neurons.
         All the layers are fully connected (dense)
-        ''' 
+        '''
 
         inputSize=len(self.data.X_train.columns)
 
         #Find number of unique outputs
-        if self.doRegression: 
+        if self.doRegression:
             outputSize = 1
-        else: 
+        else:
             outputSize = len(self.data.y_train.unique())
 
         self.defaultParams = dict(
@@ -70,11 +70,12 @@ class Dnn(object):
             hiddenLayers=hiddenLayers,dropOut=dropOut,
             l2Regularization=l2Regularization,
             activation='relu',optimizer='adam',
-            doRegression=self.doRegression
+            doRegression=self.doRegression,
+            addFinalRelu=addFinalRelu,
             )
         self.model=createDenseModel(loss=loss,extraMetrics=extraMetrics,**self.defaultParams)
         for em in extraMetrics:
-            if isinstance(em,str): 
+            if isinstance(em,str):
                 self.scoreTypes.append(em)
             else:
                 self.scoreTypes.append(em.__name__)
@@ -140,7 +141,7 @@ class Dnn(object):
         #Use a pipeline in sklearn to carry out standardisation just on the training set
         estimators = []
         estimators.append(('standardize', preprocessing.StandardScaler()))
-        estimators.append(('mlp', KerasClassifier(build_fn=createDenseModel, 
+        estimators.append(('mlp', KerasClassifier(build_fn=createDenseModel,
             epochs=epochs, batch_size=batch_size,verbose=0, **self.defaultParams))) #verbose=0
         pipeline = Pipeline(estimators)
 
@@ -157,7 +158,7 @@ class Dnn(object):
         self.config.addLine('')
 
     def gridSearch(self,param_grid,kfolds=3,epochs=20,batch_size=32,n_jobs=4):
-        '''Implementation of the sklearn grid search for hyper parameter tuning, 
+        '''Implementation of the sklearn grid search for hyper parameter tuning,
         making use of kfolds cross validation.
         Pass a dictionary of lists of parameters to test on. Choose number of cores
         to run on with n_jobs, -1 is all of them'''
@@ -166,11 +167,11 @@ class Dnn(object):
         #Check the development set isn't standardised
         if self.data.standardisedDev:
             self.data.unStandardise(justDev=True)
-        
+
         #Use a pipeline in sklearn to carry out standardisation just on the training set
         estimators = []
         estimators.append(('standardize', preprocessing.StandardScaler()))
-        estimators.append(('mlp', KerasClassifier(build_fn=createDenseModel, 
+        estimators.append(('mlp', KerasClassifier(build_fn=createDenseModel,
             epochs=epochs, batch_size=batch_size,verbose=0, **self.defaultParams)))
         pipeline = Pipeline(estimators)
 
@@ -226,7 +227,7 @@ class Dnn(object):
         else:
             classificationReport(self.model.predict_classes(X_test.as_matrix()),self.model.predict(X_test.as_matrix()),y_test,f)
             f.write( '\n\nDNN Loss, Accuracy, Significance:\n')
-        f.write(str(report)) 
+        f.write(str(report))
 
         f.write( '\n\nPerformance on train set:\n')
         report = self.model.evaluate(X_train.as_matrix(), y_train.as_matrix(), sample_weight=weights_train, batch_size=batchSize)
@@ -256,7 +257,7 @@ class Dnn(object):
 
     def compareTrainTest(self,doEvalSet=False):
 
-        if doEvalSet: 
+        if doEvalSet:
             compareTrainTest(self.model.predict,self.data.X_dev.as_matrix(),self.data.y_dev.as_matrix(),\
                 self.data.X_eval.as_matrix(),self.data.y_eval.as_matrix(),self.output,append='_eval')
         else:
@@ -304,8 +305,8 @@ class Dnn(object):
         plt.clf()
 
     def learningCurve(self,epochs=20,batch_size=32,kfolds=3,n_jobs=1,scoring=None):
-        model=KerasClassifier(build_fn=createDenseModel, 
-            epochs=epochs, batch_size=batch_size,verbose=0, **self.defaultParams)   
+        model=KerasClassifier(build_fn=createDenseModel,
+            epochs=epochs, batch_size=batch_size,verbose=0, **self.defaultParams)
         learningCurve(model,self.data.X_dev.as_matrix(),self.data.y_dev.as_matrix(),self.output,cv=kfolds,n_jobs=n_jobs,scoring=scoring)
 
     def explainPredictions(self):
@@ -321,7 +322,7 @@ class Dnn(object):
                                                    categorical_names=None,
                                                    )
 
-        def predict_fn_keras(x): 
+        def predict_fn_keras(x):
             if x.ndim>=2:
                 pred=self.model.predict(x,batch_size=1)
             else:
@@ -331,7 +332,7 @@ class Dnn(object):
         for i in range(0,10):
             #len(self.data.X_test)
             exp = explainer.explain_instance(data_row=self.data.X_test.values[random.randint(0,len(self.data.X_test)-1)],   # 2d numpy array, corresponding to a row
-                                     predict_fn=predict_fn_keras,  # classifier prediction probability function, 
+                                     predict_fn=predict_fn_keras,  # classifier prediction probability function,
                                      labels=[1,],               # iterable with labels to be explained.
                                      num_features=self.data.X_train.shape[1],      # maximum number of features present in explanation
                                      #top_labels=0,                # explanations for the K labels with highest prediction probabilities,
@@ -354,7 +355,7 @@ class Dnn(object):
 
         self.saveConfig()
         self.classificationReport(doEvalSet=doEvalSet,batchSize=batchSize)
-        if not self.doRegression: 
+        if not self.doRegression:
             self.rocCurve(doEvalSet=doEvalSet)
             self.compareTrainTest(doEvalSet=doEvalSet)
         else:
@@ -376,10 +377,10 @@ class Dnn(object):
 
     def makeHepPlots(self,expectedSignal,expectedBackground,systematics=[0.0001],makeHistograms=True,subDir=None,customPrediction=None):
         '''Plots intended for binary signal/background classification
-        
+
             - Plots significance as a function of discriminator output
-            - Plots the variables for signal and background given different classifications 
-            - If reference variables are available in the data they will also be plotted 
+            - Plots the variables for signal and background given different classifications
+            - If reference variables are available in the data they will also be plotted
             (to be implemented, MlData.referenceVars)
         '''
 
@@ -428,7 +429,7 @@ class Dnn(object):
         plt.ylabel('Cumulative event counts / 0.02')
         plt.xlabel('Classifier output')
         plt.legend()
- 
+
         plt.savefig(os.path.join(self.output,'cumulativeWeightedDiscriminator.pdf'))
         plt.clf()
 
@@ -477,7 +478,7 @@ class Dnn(object):
                     data = self.data.X
 
                 predictions= self.model.predict(data.as_matrix())
-            
+
                 #Now unstandardise
                 if self.data.standardised:
                     data=pd.DataFrame(self.data.scaler.inverse_transform(data),columns=names)
@@ -503,6 +504,5 @@ class Dnn(object):
 
         if subDir:
             self.output=oldOutput
-            
-        pass
 
+        pass

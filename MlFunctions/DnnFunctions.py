@@ -13,7 +13,7 @@ def findLayerSize(layer,refSize):
         print 'WARNING: layer must be int or float'
         return None
 
-def createDenseModel(inputSize=None,outputSize=None,hiddenLayers=[1.0],dropOut=None,l2Regularization=None,activation='relu',optimizer='adam',doRegression=False,loss=None,extraMetrics=[]):
+def createDenseModel(inputSize=None,outputSize=None,hiddenLayers=[1.0],dropOut=None,l2Regularization=None,activation='relu',optimizer='adam',doRegression=False,loss=None,extraMetrics=[],addFinalRelu=False):
     '''
     Dropout: choose percentage to be dropped out on each hidden layer (not currently applied to input layer)
     l2Regularization: choose lambda of the regularization (ie multiplier of the penalty)
@@ -28,13 +28,13 @@ def createDenseModel(inputSize=None,outputSize=None,hiddenLayers=[1.0],dropOut=N
     #Initialise the model
     model = Sequential()
 
-    if l2Regularization: 
+    if l2Regularization:
         regularization=regularizers.l2(l2Regularization)
     else:
         regularization=None
 
     #Add the first layer, taking the inputs
-    model.add(Dense(units=findLayerSize(hiddenLayers[0],refSize), 
+    model.add(Dense(units=findLayerSize(hiddenLayers[0],refSize),
         activation=activation, input_dim=inputSize,name='input',
         kernel_regularizer=regularization))
 
@@ -43,7 +43,7 @@ def createDenseModel(inputSize=None,outputSize=None,hiddenLayers=[1.0],dropOut=N
 
     #Add the extra hidden layers
     for layer in hiddenLayers[1:]:
-        model.add(Dense(units=findLayerSize(hiddenLayers[0],refSize), 
+        model.add(Dense(units=findLayerSize(hiddenLayers[0],refSize),
             activation=activation,kernel_regularizer=regularization))
 
         if dropOut: model.add(Dropout(dropOut))
@@ -52,12 +52,15 @@ def createDenseModel(inputSize=None,outputSize=None,hiddenLayers=[1.0],dropOut=N
 
         #Add the output layer and choose the type of loss function
         #Choose the loss function based on whether it's binary or not
-        if outputSize==2: 
+        if outputSize==2:
             #It's better to choose a sigmoid function and one output layer for binary
             # This is a special case of n=2 classification
             model.add(Dense(1, activation='sigmoid'))
             if not loss: loss = 'binary_crossentropy'
-        else: 
+            if addFinalRelu:
+                model.add(Dense(1, activation='relu'))
+                model.add(Dense(1, activation='sigmoid'))
+        else:
             #Softmax forces the outputs to sum to 1 so the score on each node
             # can be interpreted as the probability of getting each class
             model.add(Dense(outputSize, activation='softmax'))

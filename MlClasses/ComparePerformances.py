@@ -13,7 +13,7 @@ class ComparePerformances(object):
     def compareRoc(self,selectedResults=None,append=''):
 
         if selectedResults:
-            results = {k:self.models[k].testPrediction() for k in selectedResults}
+            results = {k:self.models[k].testPrediction() for k in selectedResults if k in self.models}
         else:
             results = {k:self.models[k].testPrediction() for k in self.models.keys()}
 
@@ -26,10 +26,10 @@ class ComparePerformances(object):
     def rankMethods(self):
 
 
-        if len(self.models)==0: 
+        if len(self.models)==0:
             print 'No models to process'
             return None
-        
+
         for i,scoreType in enumerate(self.models.values()[0].scoreTypes):
 
             accuracies={}
