@@ -5,7 +5,6 @@ import pandas as pd
 import numpy as np
 import math
 import time
-from dfConvert import convertTree
 
 from keras import callbacks
 
@@ -18,10 +17,24 @@ from MlClasses.Bdt import Bdt
 from MlClasses.Dnn import Dnn
 from MlClasses.ComparePerformances import ComparePerformances
 
-from MlFunctions.DnnFunctions import significanceLoss,significanceLossInvert,significanceLoss2Invert,significanceLossInvertSqrt,significanceFull,asimovSignificanceLoss,asimovSignificanceLossInvert,asimovSignificanceFull,truePositive,falsePositive
+from MlFunctions.DnnFunctions import (
+    significanceLoss,
+    significanceLossInvert,
+    significanceLoss2Invert,
+    significanceLossInvertSqrt,
+    significanceFull,
+    asimovSignificanceLoss,
+    asimovSignificanceLossInvert,
+    asimovSignificanceFull,
+    truePositive,
+    falsePositive
+)
 
 from linearAlgebraFunctions import gram,addGramToFlatDF
-from root_numpy import rec2array
+
+# Those import use root...
+# from root_numpy import rec2array
+# from dfConvert import convertTree
 
 timingFile = open('testPlots/timings.txt','w')
 #Callback to move onto the next batch after stopping
@@ -47,7 +60,7 @@ appendInputName=''
 makePlots=False
 
 prepareInputs=False
-addGramMatrix=False
+addGramMatrix=True
 
 #ML options
 plotFeatureImportances=False
@@ -73,6 +86,25 @@ asimovSigLossBothInvert=True
 asimovSigLossSysts=[0.01,0.05,0.1,0.2,0.3,0.4,0.5]
 crossEntropyFirst=False
 variableBatchSigLossInvert=False
+
+
+## Heiner ON
+doRegression=False
+normalLoss=True
+sigLoss=False
+sigLossInvert=False
+sigLoss2Invert=False
+sigLossInvertSqrt=False
+asimovSigLoss=False
+asimovSigLossInvert=False
+asimovSigLossBothInvert=True
+#asimovSigLossSysts=[0.01,0.05,0.1,0.2,0.3,0.4,0.5]
+asimovSigLossSysts=[0.5]
+crossEntropyFirst=False
+variableBatchSigLossInvert=False
+## Heiner OFF
+
+
 
 #If not doing the grid search
 dnnConfigs={
@@ -134,13 +166,13 @@ def hiddenLayerGrid(nLayers,nNodes):
 
 dnnGridParams = dict(
         mlp__epochs=[10,20,50],
-        mlp__batch_size=[32,64], 
+        mlp__batch_size=[32,64],
         mlp__hiddenLayers=hiddenLayerGrid([1,2,3,4,5],[2.0,1.0,0.5]),
         mlp__dropOut=[None,0.25,0.5],
         # mlp__activation=['relu','sigmoid','tanh'],
         # mlp__optimizer=['adam','sgd','rmsprop'],
         ## NOT IMPLEMENTED YET:
-        # mlp__learningRate=[0.5,1.0], 
+        # mlp__learningRate=[0.5,1.0],
         # mlp__weightConstraint=[1.0,3.0,5.0]
         )
 
@@ -168,8 +200,8 @@ if __name__=='__main__':
         bkgd = convertTree(bkgdFile,signal=False,passFilePath=True,tlVectors = ['selJet','sel_lep'])
 
         # #Expand the variables to 1D
-        signal = expandArrays(signal) 
-        bkgd = expandArrays(bkgd) 
+        signal = expandArrays(signal)
+        bkgd = expandArrays(bkgd)
 
         if saveDfs:
             print 'Saving the dataframes'
@@ -180,15 +212,15 @@ if __name__=='__main__':
             print 'bkgd size:',len(bkgd)
             bkgd.to_pickle('dfs/bkgd'+appendInputName+'.pkl')
     else:
-        print "Loading DataFrames" 
+        print "Loading DataFrames"
 
         signal = pd.read_pickle('dfs/signal'+appendInputName+'.pkl')
         bkgd = pd.read_pickle('dfs/bkgd'+appendInputName+'.pkl')
 
     if makePlots:
-        print "Making plots" 
+        print "Making plots"
         #Skip out excessive jet info
-        exceptions=[] 
+        exceptions=[]
         for k in signal.keys():
             if 'selJet' in k or '_x' in k or '_y' in k or '_z' in k:
                 exceptions.append(k)
@@ -206,7 +238,7 @@ if __name__=='__main__':
     if prepareInputs:
         print 'Preparing inputs'
 
-        # Put the data in a format for the machine learning: 
+        # Put the data in a format for the machine learning:
         # combine signal and background with an extra column indicating which it is
 
         signal['signal'] = 1
@@ -217,8 +249,8 @@ if __name__=='__main__':
         #Now add the relevant variables to the DFs (make gram matrix)
 
         #Make a matrix of J+L x J+L where J is the number of jets and L is the number of leptons
-        #Store it as a numpy matrix in the dataframe 
-        
+        #Store it as a numpy matrix in the dataframe
+
 
         #METHOD 1:
         # Store as a matrix in the numpy array
@@ -226,7 +258,7 @@ if __name__=='__main__':
 
         #Use function that takes (4x) arrays of objects (for E,px,py,pz) and returns matrix
         #Must store it as an array of arrays as 2D numpy objects can't be stored in pandas
-        
+
         #print 'm',signal['selJet_m'][0]+signal['sel_lep_m'][0]
         # signal['gram'] = signal.apply(lambda row: gram(row['sel_lep_e']+[row['MET']]+row['selJet_e'],\
         #     row['sel_lep_px']+[row['MET']*math.cos(row['METPhi'])]+row['selJet_px'],\
@@ -396,11 +428,11 @@ if __name__=='__main__':
                         if regressionVar not in varSet: continue
 
                         #Drop unconverged events for MT2
-                        if regressionVar is 'MT2W': 
+                        if regressionVar is 'MT2W':
                             toRunRegression=combinedToRun[combinedToRun.MT2W!=999.0]
                         else:
                             toRunRegression=combinedToRun
-                        
+
 
                         mlDataRegression = MlData(toRunRegression.drop('signal'),regressionVar)
                         mlDataRegression.prepare(evalSize=0.0,testSize=0.2,limitSize=limitSize,standardise=False)
@@ -418,9 +450,9 @@ if __name__=='__main__':
                         print ' > Producing diagnostics'
                         dnn.diagnostics()
 
-            
+
             else:
-                #Now lets move on to a deep neural net 
+                #Now lets move on to a deep neural net
                 for name,config in dnnConfigs.iteritems():
 
                     if normalLoss:
@@ -524,7 +556,7 @@ if __name__=='__main__':
                         dnn.makeHepPlots(expectedSignal,expectedBkgd,asimovSigLossSysts,makeHistograms=makeHistograms)
 
                         trainedModels[varSetName+'_sigLossInvertSqrt_'+name]=dnn
-                    
+
 
                     if asimovSigLossInvert:
 
@@ -645,7 +677,7 @@ if __name__=='__main__':
                             if signal==0: return weight
                             else: return 1.0
 
-                        weights = toRunXEntropyFirst.apply(lambda row: fabricateWeight(row.signal,upWeight),axis=1) 
+                        weights = toRunXEntropyFirst.apply(lambda row: fabricateWeight(row.signal,upWeight),axis=1)
 
                         mlDataXEntropyFirst = MlData(toRunXEntropyFirst,'signal',weights=weights.as_matrix())
                         mlDataXEntropyFirst.prepare(evalSize=0.0,testSize=0.3,limitSize=limitSize)
@@ -709,7 +741,7 @@ if __name__=='__main__':
                         dnn.makeHepPlots(expectedSignal,expectedBkgd,systematic,makeHistograms=makeHistograms)
 
                         trainedModels[varSetName+'_variableBatchSigLossInvert_'+name]=dnn
-        
+
 
                 pass
 
